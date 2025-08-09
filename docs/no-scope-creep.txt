@@ -1,0 +1,2 @@
+Because POSIX itself doesn't define additional locales, applications that
+depends on them are non-portable to begin with, in a "POSIX" sense.
