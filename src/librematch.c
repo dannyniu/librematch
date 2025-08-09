@@ -2,7 +2,7 @@
 
 #include "librematch.h"
 
-#define eprintf(...) printf(__VA_ARGS__)
+#define eprintf(...) //printf(__VA_ARGS__)
 
 // 2025-07-13, Idea(s) of matching algorithm:
 // 2025-07-20: moved to "librematch.md".
