@@ -1,0 +1,155 @@
+#!/bin/sh
+
+cd "$(dirname "$0")"
+
+cc=""
+ld=""
+
+opt_cc_flag='--cc=CC'
+opt_cc_help='Specifies a C compiler to override the default.'
+opt_cc_do='cc="${arg#--cc=}"'
+
+opt_ld_flag='--ld=LD'
+opt_ld_help='Specifies a linker to override the default.'
+opt_ld_do='ld="${arg#--ld=}"'
+
+# file_ext=""
+# opt_file_ext_flag='--file-ext={so,dylib}'
+# opt_file_ext_help='Specifies the filename extension for DLL files.'
+# opt_file_ext_do='file_ext="${arg#--file-ext=}"'
+
+# dllflags=""
+# dllflags_xpg8="-G"
+# dllflags_apple="-dylib"
+# dllflags_binutils="-shared"
+
+# opt_dllflags_flag='--dllflags=DLLFLAGS'
+# opt_dllflags_help='Specify flags for creating a DLL.'
+# opt_dllflags_do='dllflags="${arg#--dllflags=}"'
+
+with=""
+
+opt_with_flag='--with={x86,arm,ppc}'
+opt_with_help='Specify architecture-specific additions.'
+opt_with_do='with="$(echo "${arg#--with=}" | tr [a-z] [A-Z])"'
+
+install_prefix=""
+install_exec_prefix=""
+install_libdir=""
+install_includedir=""
+
+opt_prefix_flag='--prefix=path'
+opt_prefix_help='Specify the installation directory prefix.'
+opt_prefix_do='install_prefix="${arg#--prefix=}"'
+
+opt_exec_prefix_flag='--exec-prefix=path'
+opt_exec_prefix_help='Specify the install prefix for machine-dependent files.'
+opt_exec_prefix_do='install_exec_prefix="${arg#--exec-prefix=}"'
+
+opt_libdir_flag='--libdir=path'
+opt_libdir_help='Specify installation directory for library files.'
+opt_libdir_do='install_libdir="${arg#--libdir=}"'
+
+opt_includedir_flag='--includedir=path'
+opt_includedir_help='Specify install directory for include header files.'
+opt_includedir_do='install_includedir="${arg#--includedir=}"'
+
+opts="cc ld dllflags with prefix exec_prefix libdir includedir"
+
+case "$1" in
+    -h|--help)
+        echo Available Options:
+        for opt in $opts ; do
+            eval 'printf "  %-26s%-46s\n"' \
+                 '"$opt_'$opt'_flag" "$opt_'$opt'_help"'
+        done
+        ;;
+
+    *)
+        for arg ; do
+            for opt in $opts ; do
+                eval 'flag="${opt_'$opt'_flag}"'
+                eval 'do="${opt_'$opt'_do}"'
+                if [ X"${arg%%=*}=" = X"${flag%=*}=" ] ; then
+                    eval "$do"
+                fi
+            done
+        done
+        ;;
+esac
+
+if ! [ "$cc" ] ; then cc='${CC}' ; fi
+if ! [ "$ld" ] ; then ld='${CC}' ; fi
+
+# if ! [ "$file_ext" ] ; then
+#     if [ "$(uname -s)" = Darwin ]
+#     then file_ext=dylib
+#     else file_ext=so
+#     fi
+# fi
+#
+# if ! [ "$dllflags" ] ; then
+#     printf '%s\n' ".PHONY: getcc getld" > auto/configure-getcc.mk \
+#            "getcc:; echo ${cc}" "getld:; echo ${ld}"
+#
+#     mkcc="$(make -s -f auto/configure-getcc.mk getcc)"
+#     mkld="$(make -s -f auto/configure-getcc.mk getld)"
+#
+#     echo 'int add0(int x){ return x; }' > auto/configure-add0.c
+#     "$mkcc" -c auto/configure-add0.c -o auto/configure-add0.o
+#
+#     for vendor in xpg8 apple binutils ; do
+#         eval candflags=\"'$dllflags_'$vendor\"
+#         rm -f auto/configure.${file_ext}
+#
+#         if "$mkld" $candflags auto/configure-add0.o \
+#                    -o auto/configure.${file_ext} 2>/dev/null &&
+#                 [ -f auto/configure.${file_ext} ] ; then
+#             dllflags="$candflags"
+#             break ; fi
+#
+#         if [ "$candflags" = "-G" ] ; then continue ; fi
+#
+#         rm -f auto/configure.${file_ext}
+#         candflags=""
+#         eval for opt in \$dllflags_$vendor \; do \
+#              candflags=\"\$candflags -Xlinker \$opt\" \; done
+#
+#         if "$mkld" $candflags auto/configure-add0.o \
+#                    -o auto/configure.${file_ext} 2>/dev/null &&
+#                 [ -f auto/configure.${file_ext} ] ; then
+#             dllflags="$candflags"
+#             break ; fi
+#     done
+#
+#     if ! [ "$dllflags" ] ; then
+#         echo ERROR: Cannot determine flags for creating DLLs! >&2
+#         exit 1
+#     fi
+# fi
+#
+# case "$file_ext" in
+#     so) file_ext='so.${ProductVer}' ;;
+#     dylib) file_ext='${ProductVer}.dylib' ;;
+#     *) echo ERROR: Unknown filename extension: "$file_ext"! >&2; exit 1 ;;
+# esac
+
+{   # printf '%s\n' "FILE_EXT = $file_ext" "DLLFLAGS = $dllflags"
+
+    if [ "$ld" != '${LD}' ] ; then printf '%s\n' "LD = $ld" ; fi
+    if [ "$cc" != '${CC}' ] ; then printf '%s\n' "CC = $cc" ; fi
+
+    if [ "$with" ] ; then
+        with="$(echo "$with" | tr [a-z] [A-Z])"
+        printf '%s = %s\n' \
+               "OBJS_GROUP_WITH_ADDITION" \
+               "\${OBJS_GROUP_${with}_ADDITION}" \
+               "CFLAGS_GROUP_WITH" \
+               "\${CFLAGS_GROUP_${with}}"
+    fi
+
+    for p in prefix exec_prefix libdir includedir ; do
+        eval val=\"\$install_$p\"
+        if [ "$val" ] ; then printf '%s\n' "$p = $val" ; fi
+    done
+} > inc-config.mk
