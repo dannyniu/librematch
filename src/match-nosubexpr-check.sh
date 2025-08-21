@@ -14,6 +14,7 @@ unitest_sh=./unitest.sh
 src="\
 ./match-nosubexpr-check.c
 ./regcomp-ere.c
+./regcomp-bre.c
 ./regcomp-brackets.c
 ./regcomp-interval.c
 "

@@ -56,8 +56,16 @@ typedef struct {
     /// @brief The saved offsets. Used internally for choosing between matches.
     ptrdiff_t sv_so, sv_eo;
 
+    /// @brief Used internally for handling backreferences.
+    ptrdiff_t br_so, br_eo;
+
     /// @brief The quantification position of the current capture. Internal.
     size_t q;
+
+    /// @brief Stack depth whence the saving took place.
+    // Implementation note: try initialize it using condition on `q`
+    // and not rely on explicit initialization.
+    ptrdiff_t depth;
 } libre_match_t;
 
 /// @fn

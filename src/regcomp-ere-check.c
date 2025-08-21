@@ -23,8 +23,8 @@ void print1atom(re_atom_t *atom, int indent)
         else
         {
             printf("\n%*s", indentation, "");
-            printf("%c x %d..%d %d", atom->value,
-                   atom->rep_min, atom->rep_max, atom->quantification);
+            printf("%c x %d..%d %d ; %p", atom->value,
+                   atom->rep_min, atom->rep_max, atom->quantification, atom);
             printf("\n%*s", indentation, "");
         }
     }
@@ -39,9 +39,9 @@ void print1atom(re_atom_t *atom, int indent)
             if( (be->cbits[i / 32] >> (i % 32)) & 1 )
                 printf("%c", i);
 
-        printf("] x %d..%d %d",
+        printf("] x %d..%d %d ; %p",
                atom->rep_min, atom->rep_max,
-               atom->quantification);
+               atom->quantification, atom);
         printf("\n%*s", indentation, "");
     }
 
@@ -50,16 +50,16 @@ void print1atom(re_atom_t *atom, int indent)
         printf("( \\%d \n%*s", atom->value, indentation + indent_width, "");
         printatoms(atom->re_sub, indent+1);
         printf("\n%*s)", indentation + indent_width, "");
-        printf(" x %d..%d %d",
+        printf(" x %d..%d %d ; %p",
                atom->rep_min, atom->rep_max,
-               atom->quantification);
+               atom->quantification, atom);
         printf("\n%*s", indentation, "");
     }
 
     else if( atom->type == 4 || atom->type == 5 ) // anchor
     {
         printf("\n%*s", indentation, "");
-        printf("<%c>", atom->type == 4 ? '^' : '$');
+        printf("<%c> ; %p", atom->type == 4 ? '^' : '$', atom);
         printf("\n%*s", indentation, "");
     }
 
@@ -92,7 +92,7 @@ void printatoms(re_atom_t *atoms, int indent)
 int main()
 {
     re_atom_t *ere;
-    int groupno = 0;
+    size_t groupno = 0;
     int ret = regcomp_extended(
         &ere, "a{3,5}b^(cdef|g(hij)123)+?[k-n]*$",
         &groupno, 0, '\\');

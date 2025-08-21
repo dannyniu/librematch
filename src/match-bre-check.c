@@ -24,7 +24,7 @@ int main()
     root.overall = root.rm_so = root.rm_eo = -1;
     root.record = NULL;
     root.q = 0;
-    root.rewind = false;
+    root.stack_depth = 0;
 
 #define nmatches 10
     libre_match_t match[nmatches];
@@ -37,7 +37,7 @@ int main()
     printf("matching: \"%s\".\n", subj);
     printf("final return: %d.\n", subret);
     for(int i=0; i<nmatches; i++)
-    printf("%d %td %td\n", i, match[i].rm_so, match[i].rm_eo);
+        printf("%d %td %td\n", i, match[i].rm_so, match[i].rm_eo);
 
     return 0;
 }

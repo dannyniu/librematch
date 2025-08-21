@@ -4,7 +4,7 @@ optimize=debug
 testfunc()
 {
     #lldb \
-        $exec
+        $exec 2 $'\.?[0-9](\x27?[_0-9a-zA-Z]|[eEpP][-+]|\\.)*' 38.4e+6
 }
 
 cd "$(dirname "$0")"
@@ -12,14 +12,15 @@ unitest_sh=./unitest.sh
 . $unitest_sh
 
 src="\
-./match-subexpr-check.c
+./match-anysome-check.c
+./librematch.c
 ./regcomp-ere.c
 ./regcomp-bre.c
 ./regcomp-brackets.c
 ./regcomp-interval.c
 "
 
-arch_family=+aarch64
+arch_family=defaults
 srcset="Plain C"
 
 tests_run

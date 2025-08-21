@@ -15,6 +15,7 @@ src="\
 ./match-posixapi-check.c
 ./librematch.c
 ./regcomp-ere.c
+./regcomp-bre.c
 ./regcomp-brackets.c
 ./regcomp-interval.c
 "

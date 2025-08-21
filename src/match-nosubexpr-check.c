@@ -17,15 +17,16 @@ int main()
 
     match_ctx_t root;
     root.parent = NULL;
-    root.first = &root;
     root.root = NULL;
     root.atom = regex;
     root.atom_offset = 0;
     root.overall = root.rm_so = root.rm_eo = -1;
     root.record = NULL;
     root.q = 0;
+    root.stack_depth = 0;
 
     libre_match_t match[1];
+    match[0].q = -1;
     match[0].rm_so = -1;
     match[0].rm_eo = -1;
 

@@ -2,7 +2,11 @@
 
 #include "librematch.h"
 
+#include <stddef.h>
+#define ctx subctx
 #define eprintf(...) //printf(__VA_ARGS__)
+#define tprintf(fmt, ...) do { eprintf("%*s" fmt, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
+#define dumpstate(pre, post, ret) tprintf(pre " %d; %p:%td, q=%zd, offsub=%td, info=%d " post, __LINE__, subctx.atom, subctx.atom_offset, subctx.q, offsub, ret)
 
 // 2025-07-13, Idea(s) of matching algorithm:
 // 2025-07-20: moved to "librematch.md".
@@ -19,8 +23,7 @@ struct match_ctx {
     // i.e. the "quantification" to match a single atom with.
     size_t  q;
 
-    // at root. set to 0 initially, and 1 when match completes.
-    size_t  rewind;
+    ptrdiff_t   stack_depth;
 
     // these 4 are in the same domain,
     // i.e. offset into subject string.
@@ -52,7 +55,7 @@ static inline int fRegNotEOL          (int flags){ return flags | (1 << 7); }
 // If the atom at the current `atom_offset` is a subexpression,
 // then save its matched range if it hasn't already.
 void subexpr_save1match(
-    match_ctx_t *ctx, libre_match_t *matches, size_t nmatches);
+    match_ctx_t *ctx, libre_match_t *matches, size_t nmatches, int ret);
 
 // @returns
 // On a better match, 2 is returned; on a match that's otherwise not better,
@@ -87,16 +90,19 @@ int try_match_next_atom(
                 fProbableBetterMatch(flags) :
                 fSuccessfulMatch(flags);
 
-        eprintf("-- subsequent atom --\n");
+        tprintf("-- subsequent atom: {\n");
         ++ ctx.atom_offset;
         ctx.q = 0;
         ctx.rm_so = -1;
         ctx.rm_eo = -1;
         ctx.record = NULL;
 
+        ++ ctx.stack_depth;
         subret = match_atom_withq(
             subject, slen, matchctx->rm_eo,
             matches, nmatches, flags, &ctx);
+        -- ctx.atom_offset;
+        tprintf("}\n");
 
         if( subret == -1 ) ret = subret; // TODO: handle errors.
         else if( subret == 0 )
@@ -156,14 +162,17 @@ int try_increase_q(
         {
             ctx.q ++;
 
-            eprintf("-- repeat atom --\n");
+            tprintf("-- repeat atom: {\n");
+            ++ ctx.stack_depth;
             subret = match_atom_withq(
                 subject, slen, matchctx->rm_eo,
                 matches, nmatches, flags, &ctx);
+            -- ctx.stack_depth;
+            tprintf("}\n");
         }
         else
         {
-            eprintf("-- repeat end --\n");
+            tprintf("-- repeat end --\n");
             subret = 0;
         }
 
@@ -221,7 +230,7 @@ int match_atom_withq(
         subctx.root = matchctx;
     }
 
-    eprintf("-- Reached %d; %p:%p, %td, q=%zd, %d --\n", __LINE__, &subctx, subctx.atom, offsub, matchctx->q, flags);
+    dumpstate("// Reached", "//\n", flags);
 
     if( (subctx.atom[subctx.atom_offset].type == 0 ||
          subctx.atom[subctx.atom_offset].type == 6) &&
@@ -233,7 +242,7 @@ int match_atom_withq(
         {
             assert( 0 );
             subctx.parent->rm_eo = offsub;
-            eprintf("-- Returning %d; %p:%p, ret==%d --\n", __LINE__, &subctx, subctx.atom, 1);
+            dumpstate("-- Returning", "--\n", 1);
             return 1;
         }
 
@@ -246,50 +255,50 @@ int match_atom_withq(
         // leftwards shorter match.
         if( flags == fDefiniteBetterMatch(flags) )
         {
-            //eprintf("Definite Better Match.\n");
+            tprintf("Definite Better Match.\n");
             ret = 2;
         }
 
         else if( flags == fNotABetterMatch(flags) )
         {
-            //eprintf("Not a Better Match.\n");
+            tprintf("Not a Better Match.\n");
             ret = 1;
         }
 
         // greedy match.
         else if( flags != fRegMinimal(flags) && offsub > overall )
         {
-            //eprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
+            tprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
             ret = 2;
         }
         else if( flags != fRegMinimal(flags) && offsub < overall )
         {
-            //eprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
+            tprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
             ret = 1;
         }
 
         // minimal match.
         else if( flags == fRegMinimal(flags) && offsub < overall )
         {
-            //eprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
+            tprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
             ret = 2;
         }
         else if( flags == fRegMinimal(flags) && offsub > overall )
         {
-            //eprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
+            tprintf(".. reached %d %d %td ..\n", __LINE__, flags, overall);
             ret = 1;
         }
 
         // leftwards longer match.
         else if( flags == fProbableBetterMatch(flags) )
         {
-            //eprintf("Probable Better Match.\n");
+            tprintf("Probable Better Match.\n");
             ret = 2;
         }
 
         else if( flags == fSuccessfulMatch(flags) )
         {
-            //eprintf("Successful Match.\n");
+            tprintf("Successful Match.\n");
             ret = 1;
         }
 
@@ -303,7 +312,7 @@ int match_atom_withq(
         if( ret == 2 )
         {
             size_t n;
-            //eprintf("Finally Better, %td %td\n", overall, offsub);
+            tprintf("Finally Better, %td %td\n", overall, offsub);
             overall = subctx.root ?
                 (subctx.root->overall = offsub) :
                 (subctx.overall = offsub);
@@ -314,13 +323,25 @@ int match_atom_withq(
             }
             for(n=1; n<nmatches; n++)
             {
+                eprintf("best: %td %td %td %td %td.\n", matches[n].rm_so, matches[n].rm_eo, matches[n].sv_so, matches[n].sv_eo, matches[n].q);
+                if( (ptrdiff_t)matches[n].q < 0 ) continue;
                 matches[n].rm_so = matches[n].sv_so;
                 matches[n].rm_eo = matches[n].sv_eo;
-                //matches[n].q
+            }
+        }
+        else if( ret == 1 )
+        {
+            size_t n;
+            for(n=1; n<nmatches; n++)
+            {
+                eprintf("good: %td %td %td %td %td.\n", matches[n].rm_so, matches[n].rm_eo, matches[n].sv_so, matches[n].sv_eo, matches[n].q);
+                if( (ptrdiff_t)matches[n].q < 0 ) continue;
+                matches[n].rm_so = matches[n].sv_so;
+                matches[n].rm_eo = matches[n].sv_eo;
             }
         }
 
-        eprintf("-- Returning %d; %p:%p, ret==%d --\n", __LINE__, &subctx, subctx.atom, ret);
+        dumpstate("-- Returning", "--\n", ret);
         return ret;
     }
 
@@ -337,9 +358,11 @@ int match_atom_withq(
             spwnctx.rm_so = offsub;
             spwnctx.rm_eo = offsub;
             spwnctx.record = NULL;
-            //eprintf("SubExpr with Q=%zd.\n", subctx.q);
+            tprintf("- SubExpr with Q=%zd. -\n", subctx.q);
             if( subctx.q == 0 )
             {
+                // Initialize offset anchors for actually
+                // quantified subexpression matching.
                 subctx.rm_so = offsub;
                 subctx.rm_eo = offsub;
             }
@@ -353,13 +376,14 @@ int match_atom_withq(
                 if( !subret )
                 {
                     subctx.rm_so = subctx.rm_eo = -1;
-                    eprintf("-- !! %d; %p:%p, match={NULL} --\n", __LINE__, &subctx, subctx.atom);
+                    tprintf("-- !! %d; %p:%td, match={NULL} --\n", __LINE__, subctx.atom, subctx.atom_offset);
                 }
                 else
                 {
                     subctx.rm_eo = spwnctx.rm_eo;
                     ret = subret;
                 }
+                tprintf("- NextAlt -\n");
                 goto next_alternative;
             }
         }
@@ -376,10 +400,14 @@ int match_atom_withq(
                 size_t len;
                 int ref = subctx.atom[subctx.atom_offset].value;
                 // Backreference, BRE-specific addition.
-                if( (size_t)ref >= nmatches ) return -1;
+                if( (size_t)ref >= nmatches )
+                {
+                    dumpstate("-- Returning", "--\n", -1);
+                    return -1;
+                }
 
-                so = matches[ref].sv_so;
-                len = matches[ref].sv_eo - matches[ref].sv_so;
+                so = matches[ref].br_so;
+                len = matches[ref].br_eo - matches[ref].br_so;
 
                 if( (size_t)offsub + len > slen )
                 {
@@ -393,18 +421,26 @@ int match_atom_withq(
                 {
                     subctx.rm_so = offsub;
                     subctx.rm_eo = offsub + len;
-                    eprintf("- bre; so=%td, eo=%td.\n", subctx.rm_so, subctx.rm_eo);
+                    tprintf("- bre; so=%td, eo=%td.\n", subctx.rm_so, subctx.rm_eo);
                     ret = 1;
                 }
-                eprintf("- BackRef ret=%d, %td, %td, %zd -\n", ret, offsub, so, len);
+                tprintf("- BackRef ret=%d, %td, %td, %zd -\n", ret, offsub, so, len);
                 if( ret == 0 ) break;
             }
         }
         else if( subctx.atom[subctx.atom_offset].type == 0 )
         {
-            //eprintf("SubExpr Ended.\n", subctx.q);
+            tprintf("- SubExpr Ended, NextAlt. -\n");
             subctx.rm_so = subctx.rm_eo = offsub;
             goto next_alternative;
+        }
+        else if( subctx.atom[subctx.atom_offset].type == 6 )
+        {
+            tprintf("- AltDelim %td %td -\n", subctx.parent->rm_so, subctx.parent->rm_eo);
+            ret = ret > 0 ? ret : flags == fDefiniteBetterMatch(flags) ? 2 : 1;
+            subctx.parent->rm_eo = subctx.rm_so = subctx.rm_eo = offsub;
+            subexpr_save1match(matchctx->parent, matches, nmatches, ret);
+            goto subsequent_expr;
         }
         else
         {
@@ -420,12 +456,15 @@ int match_atom_withq(
                     subject, slen, offsub, flags);
                 if( !subret )
                 {
-                    //eprintf("-- !! %d; %p:%p, match={NULL} --\n", __LINE__, &subctx, subctx.atom);
+                    tprintf("-- !! %d; %p:%td, match={NULL} --\n", __LINE__, subctx.atom, subctx.atom_offset);
+                    tprintf("-- .. slen=%zd, offsub=%td, %c, --\n", slen, offsub, subject[offsub]);
                     ret = 0;
                     goto next_alternative;
                 }
                 else
                 {
+                    tprintf("-- @@ %d; %p:%td, matched --\n", __LINE__, subctx.atom, subctx.atom_offset);
+                    tprintf("-- @@ slen=%zd, offsub=%td, %c, --\n", slen, offsub, subject[offsub]);
                     subctx.rm_so = subctx.rm_eo = offsub;
                     if( subctx.atom[subctx.atom_offset].type == 1 ||
                         subctx.atom[subctx.atom_offset].type == 2 )
@@ -437,29 +476,39 @@ int match_atom_withq(
         // it is assumed at this point that subctx.rm_* are set.
 
         // savedctx = subctx;
-        eprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
+        tprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
 
         ret = try_match_next_atom(
             subject, slen, offsub, matches, nmatches,
             flags, &subctx, ret);
 
-        eprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
-        ret = try_increase_q(
-            subject, slen, offsub, matches, nmatches,
-            flags, &subctx, ret);
-
-        eprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
-
-        if( subctx.parent )
+        if( subctx.parent ) // save every potential good match.
         {
             if( subctx.q >= (size_t)subctx.atom[
                     subctx.atom_offset].rep_min )
             {
                 subctx.parent->rm_eo = subctx.rm_eo;
-                subexpr_save1match(matchctx->parent, matches, nmatches);
+                subexpr_save1match(matchctx->parent, matches, nmatches, ret);
             }
-        }//*/
+        }
+
+        ret = try_increase_q(
+            subject, slen, offsub, matches, nmatches,
+            flags, &subctx, ret);
+
+        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+
+        if( subctx.parent ) // save every potential good match.
+        {
+            if( subctx.q >= (size_t)subctx.atom[
+                    subctx.atom_offset].rep_min )
+            {
+                subctx.parent->rm_eo = subctx.rm_eo;
+                subexpr_save1match(matchctx->parent, matches, nmatches, ret);
+            }
+        }
 
         if( subctx.q < (size_t)subctx.atom[
                 subctx.atom_offset].rep_min )
@@ -468,14 +517,20 @@ int match_atom_withq(
     next_alternative:
         if( subctx.atom_offset > 0 &&
             subctx.atom[subctx.atom_offset-1].type != 6 )
-            break; // not the next alternative.
+            break; // not the beginning of an alternative.
 
         while( true )
         {
+            // set to one after the beginning or the alternative delimiter,
             ++  subctx.atom_offset;
+
+            // break when the next is reached (delim or end).
             if( subctx.atom[subctx.atom_offset].type == 0 ||
                 subctx.atom[subctx.atom_offset].type == 6 )
-                break; // found alternative delimiter (or end of array).
+                break;
+
+            // The order of increment and break should matter, if changing the
+            // order doesn't break application, then this code is buggy.
         }
 
         if( !subctx.parent )
@@ -483,46 +538,62 @@ int match_atom_withq(
             if( subctx.atom[subctx.atom_offset].type == 6 )
             {
                 subctx.atom_offset ++;
-                //eprintf("alternative offset %td.\n", subctx.atom_offset);
+                //tprintf("alternative offset %td.\n", subctx.atom_offset);
                 continue;
             }
             else break; // no more alternatives.
         }
         // else we're in a subexpression.
 
-        eprintf("ret(%d)== %d; NextAlt in Parent.\n", __LINE__, ret);
+        tprintf("ret(%d)==%d; NextAlt (%p:%td) in Parent (%p:%td).\n", __LINE__, ret, &subctx, subctx.atom_offset, subctx.parent, subctx.parent->atom_offset);
+        // 2025-08-20: reworked this termination condition.
         if( subctx.parent->rm_so == subctx.parent->rm_eo )
-            break;
+        {
+            // 2025-08-20
+            // [Interpretives for the recursion termination condition]:
+            // To avoid infinite recursion, exclude zero-length matches,
+            // as they may confuse optional quantifications
+            // and alternative steppers.
+            if( subctx.atom[subctx.atom_offset].type == 0 )
+                break;
+        }
 
+    // This label can preceed or follow the above condition block,
+    // it won't make difference, as the only jump source required
+    // the atom to be of type 6 (alternative separator) to enter.
+    subsequent_expr:
         spwnctx = *subctx.parent;
 
-        eprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
         ret = try_match_next_atom(
             subject, slen, offsub, matches, nmatches,
             flags, &spwnctx, ret);
 
-        eprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
-        if( (size_t)offsub <= slen )
+        if( (size_t)offsub <= slen &&
+            subctx.parent->rm_so != subctx.parent->rm_eo )
+        {
             ret = try_increase_q(
                 subject, slen, offsub, matches, nmatches,
                 flags, &spwnctx, ret);
+        }
 
-        eprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
         if( subctx.atom[subctx.atom_offset].type == 6 )
         {
             subctx.atom_offset ++;
-            //eprintf("alternative offset %td.\n", subctx.atom_offset);
+            //tprintf("alternative offset %td.\n", subctx.atom_offset);
             continue;
         }
         else break; // no more alternatives.
     }
 
-    eprintf("ret(%d)==%d\n", __LINE__, ret);
+    tprintf("ret(%d)==%d\n", __LINE__, ret);
 
-    eprintf("-- Returning %d; %p:%p, subret==%d --\n", __LINE__, &subctx, subctx.atom, ret);
+    dumpstate("-- Returning", "--\n", ret);
     if( nmatches > 0 && ret > 0 )
     {
         assert( matches );
@@ -532,25 +603,48 @@ int match_atom_withq(
     return ret; // 2025-07-23: ?? supposedly ??
 }
 
-void subexpr_save1match(
-    match_ctx_t *ctx, libre_match_t *matches, size_t nmatches)
-{
-    re_atom_t *atom = ctx->atom + ctx->atom_offset;
-    if( atom->type != 3 || (size_t)atom->value >= nmatches ) return;
+#undef ctx
 
-    /*
+void subexpr_save1match(
+    match_ctx_t *ctx, libre_match_t *matches, size_t nmatches, int subret)
+{
+#define subctx (*ctx)
+    re_atom_t *atom = ctx->atom + ctx->atom_offset;
+    if( atom->type != 3 || (size_t)atom->value >= nmatches )
+    {
+        tprintf("unsavedmatch %d; %d %d.\n", __LINE__, atom->type, atom->value);
+        return;
+    }
+
+    //*
     eprintf("save1match %d; q_m=%td, q_x=%td, subret=%d.\n",
-            __LINE__, matches[atom->value].q, ctx->q, subret);
+           __LINE__, matches[atom->value].q, ctx->q, subret);
     eprintf("save1match %d; n=%d, sv_so=%td, sv_eo=%td.\n",
-            __LINE__, matches[atom->value].q,
-            matches[atom->value].sv_so,
-            matches[atom->value].sv_eo);
+           __LINE__, atom->value,
+           matches[atom->value].sv_so,
+           matches[atom->value].sv_eo);
     eprintf("save1match %d; n=%d, rm_so=%td, rm_eo=%td.\n",
-    __LINE__, atom->value, ctx->rm_so, ctx->rm_eo);//*/
+           __LINE__, atom->value, ctx->rm_so, ctx->rm_eo);//*/
+
+    matches[atom->value].br_so = ctx->rm_so;
+    matches[atom->value].br_eo = ctx->rm_eo;
 
     while( true )
     {
-        if( (ptrdiff_t)matches[atom->value].q <= (ptrdiff_t)ctx->q ) break;
+        if( subret <= 0 ) return;
+        if( (ptrdiff_t)matches[atom->value].q < (ptrdiff_t)ctx->q )
+        {
+            matches[atom->value].depth = 0;
+            break;
+        }
+        if( matches[atom->value].q == ctx->q && subret == 2 )
+        {
+            if( matches[atom->value].depth < ctx->stack_depth )
+            {
+                matches[atom->value].depth = ctx->stack_depth;
+                break;
+            }
+        }
         return;
     }
 
@@ -615,10 +709,10 @@ int match_atom_scalar(
     int t = (uint8_t)subject[offsub];
 
     /*
-      eprintf("%p ", atom);
-      eprintf("%c(%02x) @ %td, ", t, t, offsub);
-      eprintf("q=%d ", atom->quantification);
-      eprintf("t=%d c=%c(%02x) \n", atom->type, atom->value, atom->value);
+      tprintf("%p ", atom);
+      tprintf("%c(%02x) @ %td, ", t, t, offsub);
+      tprintf("q=%d ", atom->quantification);
+      tprintf("t=%d c=%c(%02x) \n", atom->type, atom->value, atom->value);
     //*/
 
     if( (size_t)offsub > slen ) return false;
@@ -695,7 +789,7 @@ int libregexec(
 {
     int xflags = 0, subret = 0;
     libre_match_t tmatches[10], *m;
-    size_t n, slen;
+    size_t n, slen, t;
     ptrdiff_t offsub;
 
     if( preg->flags & LIBREG_ICASE ) xflags = fRegICase(xflags);
@@ -714,9 +808,11 @@ int libregexec(
         n = nmatch;
     }
 
-    for(n=0; n<nmatch; n++)
+    for(t=0; t<nmatch; t++)
     {
-        pmatch[n].rm_so = pmatch[n].rm_eo = pmatch[n].q = -1;
+        // 2025-08-21:
+        // q is unsigned, it should come last to be "strictly" portable.
+        m[t].q = m[t].rm_so = m[t].rm_eo = -1;
     }
 
     if( (preg->flags ^ LIBREG_NEWLINE) & LIBREG_NEWLINE )
@@ -732,7 +828,7 @@ int libregexec(
             root.overall = root.rm_so = root.rm_eo = -1;
             root.record = NULL;
             root.q = 0;
-            root.rewind = false;
+            root.stack_depth = 0;
 
             subret = match_atom_withq(
                 string, slen, offsub, m, n, xflags, &root);
@@ -767,14 +863,19 @@ int libregexec(
                 root.overall = root.rm_so = root.rm_eo = -1;
                 root.record = NULL;
                 root.q = 0;
-                root.rewind = false;
+                root.stack_depth = 0;
 
                 subret = match_atom_withq(
                     string+offptr, slen, offsub, m, n, rflags, &root);
 
                 if( subret > 0 )
                 {
-                    for(n=0; n<nmatch; n++) pmatch[n] = m[n];
+                    for(n=0; n<nmatch; n++)
+                    {
+                        pmatch[n] = m[n];
+                        pmatch[n].rm_so += offptr;
+                        pmatch[n].rm_eo += offptr;
+                    }
                     return 0;
                 }
                 if( subret < 0 ) return subret;
