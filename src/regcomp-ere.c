@@ -1,6 +1,8 @@
 /* DannyNiu/NJF, 2025-06-18. Public Domain. */
 
+#ifndef eprintf
 #define eprintf(...) // dprintf(2, __VA_ARGS__)
+#endif // eprintf
 
 #include "regcomp.h"
 

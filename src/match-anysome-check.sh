@@ -4,8 +4,9 @@ optimize=debug
 testfunc()
 {
     #lldb \
-        #$exec 2 $'\.?[0-9](\x27?[_0-9a-zA-Z]|[eEpP][-+]|\\.)*' 38.4e+6
-        $exec 5 '(u8|[uUL])?"[^\"]*"' 'u8"Hello World!"'
+        $exec 2 $'\.?[0-9](\x27?[_0-9a-zA-Z]|[eEpP][-+]|\\.)*' 38.4e+6
+    $exec 3 '(u8|[uUL])?"([^\"]|\\[\"])*"' 'u8"Hello World! \\"'
+    : ::::::::::::::::::::::::::::::::::::: 0123456789012345678
 }
 
 cd "$(dirname "$0")"
@@ -23,5 +24,6 @@ src="\
 
 arch_family=defaults
 srcset="Plain C"
+#cflags="-Deprintf(...)=printf(__VA_ARGS__)"
 
 tests_run

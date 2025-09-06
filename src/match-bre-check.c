@@ -33,7 +33,7 @@ int main()
             match[i].rm_so = match[i].rm_eo =
             match[i].sv_so = match[i].sv_eo = -1;
 
-    int subret = match_atom_withq(subj, strlen(subj), 0, match, nmatches, 0, &root);
+    int subret = match_atom_withq(subj, strlen(subj), 0, match, nmatches, fRegBRE(0), &root);
     printf("matching: \"%s\".\n", subj);
     printf("final return: %d.\n", subret);
     for(int i=0; i<nmatches; i++)

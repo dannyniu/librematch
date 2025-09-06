@@ -2,7 +2,9 @@
 
 #include "atoms.h"
 
+#ifndef eprintf
 #define eprintf(...) // dprintf(2, __VA_ARGS__)
+#endif // eprintf
 
 ptrdiff_t regcomp_interval(
     int32_t *outmin, int32_t *outmax,

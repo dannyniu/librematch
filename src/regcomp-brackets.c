@@ -2,7 +2,9 @@
 
 #include "regcomp.h"
 
+#ifndef eprintf
 #define eprintf(...) // dprintf(2, __VA_ARGS__)
+#endif // eprintf
 
 static inline void be_set_range(bracket_t *be, int start, int end)
 {

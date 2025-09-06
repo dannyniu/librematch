@@ -4,7 +4,9 @@
 
 #include <stddef.h>
 #define ctx subctx
-#define eprintf(...) printf(__VA_ARGS__)
+#ifndef eprintf
+#define eprintf(...) //printf(__VA_ARGS__)
+#endif // eprintf
 #define tprintf(fmt, ...) do { eprintf("%*s" fmt, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
 #define dumpstate(pre, post, ret) tprintf(pre " %d; %p:%td, q=%zd, offsub=%td, info=%d " post, __LINE__, subctx.atom, subctx.atom_offset, subctx.q, offsub, ret)
 
@@ -51,6 +53,7 @@ static inline int fRegMinimal         (int flags){ return flags | (1 << 4); }
 static inline int fRegICase           (int flags){ return flags | (1 << 5); }
 static inline int fRegNotBOL          (int flags){ return flags | (1 << 6); }
 static inline int fRegNotEOL          (int flags){ return flags | (1 << 7); }
+static inline int fRegBRE             (int flags){ return flags | (1 << 8); }
 
 // If the atom at the current `atom_offset` is a subexpression,
 // then save its matched range if it hasn't already.
@@ -221,7 +224,8 @@ int match_atom_withq(
 
     // local working variables.
     ptrdiff_t record = -1;
-    int ret = -1, subret = -1; //, flags_saved = flags;
+    short ret = -1, subret = -1;
+    short unless_match;
 
     if( !subctx.record ) subctx.record = &record;
 
@@ -348,6 +352,7 @@ int match_atom_withq(
     while( true )
     {
         match_ctx_t spwnctx;
+        unless_match = 0;
         if( subctx.atom[subctx.atom_offset].type == 3 )
         {
             spwnctx = subctx;
@@ -483,6 +488,7 @@ int match_atom_withq(
         // 2025-09-06: likewise, `ret` should also be assigned.
 
         // savedctx = subctx;
+        unless_match = 1;
         tprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
 
         ret = try_match_next_atom(
@@ -573,21 +579,27 @@ int match_atom_withq(
 
         tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
-        ret = try_match_next_atom(
-            subject, slen, offsub, matches, nmatches,
-            flags, &spwnctx, ret);
-
-        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
-
-        if( (size_t)offsub <= slen &&
-            subctx.parent->rm_so != subctx.parent->rm_eo )
+        if( unless_match || ret ||
+            flags == fRegBRE(flags) || // BRE has back-ref, but no alt-sep.
+            spwnctx.atom[spwnctx.atom_offset+1].type == 0 ||
+            spwnctx.atom[spwnctx.atom_offset+1].type == 6 )
         {
-            ret = try_increase_q(
+            ret = try_match_next_atom(
                 subject, slen, offsub, matches, nmatches,
                 flags, &spwnctx, ret);
-        }
 
-        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+
+            if( (size_t)offsub <= slen &&
+                subctx.parent->rm_so != subctx.parent->rm_eo )
+            {
+                ret = try_increase_q(
+                    subject, slen, offsub, matches, nmatches,
+                    flags, &spwnctx, ret);
+            }
+
+            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+        }
 
         if( subctx.atom[subctx.atom_offset].type == 6 )
         {
@@ -801,6 +813,7 @@ int libregexec(
 
     if( preg->flags & LIBREG_ICASE ) xflags = fRegICase(xflags);
     if( preg->flags & LIBREG_MINIMAL ) xflags = fRegMinimal(xflags);
+    if( !(preg->flags & LIBREG_EXTENDED) ) xflags = fRegBRE(xflags);
     if( eflags & LIBREG_NOTBOL ) xflags = fRegNotBOL(xflags);
     if( eflags & LIBREG_NOTEOL ) xflags = fRegNotEOL(xflags);
 
