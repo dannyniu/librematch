@@ -4,7 +4,8 @@ optimize=debug
 testfunc()
 {
     #lldb \
-        $exec 2 $'\.?[0-9](\x27?[_0-9a-zA-Z]|[eEpP][-+]|\\.)*' 38.4e+6
+        #$exec 2 $'\.?[0-9](\x27?[_0-9a-zA-Z]|[eEpP][-+]|\\.)*' 38.4e+6
+        $exec 5 '(u8|[uUL])?"[^\"]*"' 'u8"Hello World!"'
 }
 
 cd "$(dirname "$0")"

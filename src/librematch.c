@@ -4,7 +4,7 @@
 
 #include <stddef.h>
 #define ctx subctx
-#define eprintf(...) //printf(__VA_ARGS__)
+#define eprintf(...) printf(__VA_ARGS__)
 #define tprintf(fmt, ...) do { eprintf("%*s" fmt, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
 #define dumpstate(pre, post, ret) tprintf(pre " %d; %p:%td, q=%zd, offsub=%td, info=%d " post, __LINE__, subctx.atom, subctx.atom_offset, subctx.q, offsub, ret)
 
@@ -431,6 +431,12 @@ int match_atom_withq(
         else if( subctx.atom[subctx.atom_offset].type == 0 )
         {
             tprintf("- SubExpr Ended, NextAlt. -\n");
+
+            // Added back 2025-09-06.
+            // This is otherwise not an error, but `ret` had nonetheless
+            // been initialized to -1, so set it to 0 at this point.
+            ret = 0; 
+
             subctx.rm_so = subctx.rm_eo = offsub;
             goto next_alternative;
         }
@@ -474,6 +480,7 @@ int match_atom_withq(
         }
 
         // it is assumed at this point that subctx.rm_* are set.
+        // 2025-09-06: likewise, `ret` should also be assigned.
 
         // savedctx = subctx;
         tprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
@@ -558,9 +565,9 @@ int match_atom_withq(
                 break;
         }
 
-    // This label can preceed or follow the above condition block,
-    // it won't make difference, as the only jump source required
-    // the atom to be of type 6 (alternative separator) to enter.
+        // This label can preceed or follow the above condition block,
+        // it won't make difference, as the only jump source required
+        // the atom to be of type 6 (alternative separator) to enter.
     subsequent_expr:
         spwnctx = *subctx.parent;
 
@@ -618,13 +625,13 @@ void subexpr_save1match(
 
     //*
     eprintf("save1match %d; q_m=%td, q_x=%td, subret=%d.\n",
-           __LINE__, matches[atom->value].q, ctx->q, subret);
+            __LINE__, matches[atom->value].q, ctx->q, subret);
     eprintf("save1match %d; n=%d, sv_so=%td, sv_eo=%td.\n",
-           __LINE__, atom->value,
-           matches[atom->value].sv_so,
-           matches[atom->value].sv_eo);
+            __LINE__, atom->value,
+            matches[atom->value].sv_so,
+            matches[atom->value].sv_eo);
     eprintf("save1match %d; n=%d, rm_so=%td, rm_eo=%td.\n",
-           __LINE__, atom->value, ctx->rm_so, ctx->rm_eo);//*/
+            __LINE__, atom->value, ctx->rm_so, ctx->rm_eo);//*/
 
     matches[atom->value].br_so = ctx->rm_so;
     matches[atom->value].br_eo = ctx->rm_eo;
@@ -839,6 +846,11 @@ int libregexec(
                 return 0;
             }
             if( subret < 0 ) return subret;
+            
+            for(n=0; n<nmatch; n++)
+                m[n].rm_so = m[n].rm_eo =
+                    pmatch[n].rm_so =
+                    pmatch[n].rm_eo = -1;
         }
     }
     else // line-based.
@@ -879,6 +891,11 @@ int libregexec(
                     return 0;
                 }
                 if( subret < 0 ) return subret;
+
+                for(n=0; n<nmatch; n++)
+                    m[n].rm_so = m[n].rm_eo =
+                        pmatch[n].rm_so =
+                        pmatch[n].rm_eo = -1;
             }
 
             offptr += offsub;
