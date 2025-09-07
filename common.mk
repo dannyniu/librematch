@@ -5,7 +5,7 @@ ProductName = librematch
 MajorVer = 0
 MinorVer = 1
 ProductVer = ${MajorVer}.${MinorVer}
-ProductRev = ${ProductVer}.1
+ProductRev = ${ProductVer}.2
 
 FILE_EXT_ELF = a
 FILE_EXT_MACHO = a

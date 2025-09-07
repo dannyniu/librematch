@@ -21,5 +21,6 @@ src="\
 
 arch_family=+aarch64
 srcset="Plain C"
+#cflags="-Deprintf(...)=printf(__VA_ARGS__)"
 
 tests_run
