@@ -10,7 +10,7 @@
 #define dumpstate(...)
 #else
 #warning Debugging code depends on the original expression string not being freed!
-#define tprintf(fmt, ...) do { ptrdiff_t ao = subctx.atom_offset; (void)ao; eprintf("[%td]'%c'%*s" fmt, ao, *subctx.atom[ao].expp, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
+#define tprintf(fmt, ...) do { ptrdiff_t ao = subctx.atom_offset; (void)ao; eprintf("[%td/%p]'%c'%*s" fmt, ao, subctx.atom[ao].expp, *subctx.atom[ao].expp, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
 #define dumpstate(pre, post, ret) tprintf(pre " %d; q=%zd, offsub=%td, ret=%d, flags=%d " post, __LINE__, subctx.q, offsub, ret, flags)
 #endif // eprintf
 
@@ -232,7 +232,7 @@ int match_atom_withq(
     ptrdiff_t record = -1;
 #define atomoff subctx.atom_offset
     short ret = -1, subret = -1;
-    short unless_match, AtomType;
+    int AtomType;
 
     if( !subctx.record ) subctx.record = &record;
 
@@ -361,7 +361,6 @@ int match_atom_withq(
     while( true )
     {
         match_ctx_t spwnctx;
-        unless_match = 0;
         AtomType = subctx.atom[atomoff].type;
 
         // MARK: Match the current atom.
@@ -479,21 +478,27 @@ int match_atom_withq(
                 // Note 2025-09-07:
                 // Subsummed to the following assignment to `ret`.
             }
-            ret = ret > 0 ? ret : flags == fDefiniteBetterMatch(flags) ? 2 : 1;
+            if( ret == -1 ) ret = 0;
+
+            subret = flags == fDefiniteBetterMatch(flags) ? 2 : 1;
+            subret = ret ? ret : subret;
 
             subctx.parent->rm_eo = subctx.rm_so = subctx.rm_eo = offsub;
-            subexpr_save1match(matchctx->parent, matches, nmatches, ret);
+            subexpr_save1match(matchctx->parent, matches, nmatches, subret);
 
             spwnctx = *subctx.parent;
 
             tprintf("- SubSeqExpr rm_eo=%td offsub=%td -\n", subctx.rm_eo, offsub);
             tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
 
-            ret = try_match_next_atom(
-                subject, slen, matches, nmatches,
-                flags, &spwnctx, ret);
+            subret = ret;
+            tprintf("subret(%d)==%d; q=%zd\n", __LINE__, subret, subctx.q);
 
-            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+            subret = try_match_next_atom(
+                subject, slen, matches, nmatches,
+                flags, &spwnctx, subret);
+
+            tprintf("subret(%d)==%d; q=%zd\n", __LINE__, subret, subctx.q);
 
             if( (size_t)offsub <= slen &&
                 subctx.parent->rm_so != subctx.parent->rm_eo )
@@ -502,13 +507,14 @@ int match_atom_withq(
                     (subctx.q <= (size_t)subctx.atom[atomoff].rep_max &&
                      subctx.q <= (size_t)subctx.atom[atomoff].rep_min) )
                 {
-                    ret = try_increase_q(
+                    subret = try_increase_q(
                         subject, slen, matches, nmatches,
-                        flags, &spwnctx, ret);
+                        flags, &spwnctx, subret);
                 }
             }
 
-            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+            tprintf("subret(%d)==%d; q=%zd\n", __LINE__, subret, subctx.q);
+            ret = subret;
 
             // 2025-09-09:
             // Reached as an end of a slice of (sub-)expression.
@@ -558,7 +564,6 @@ int match_atom_withq(
         // 2025-09-06: likewise, `ret` should also be assigned.
 
         //- savedctx = subctx;
-        unless_match = 1;
         tprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
 
         ret = try_match_next_atom(
