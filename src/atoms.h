@@ -43,6 +43,9 @@ struct re_atom {
     int32_t rep_min;
     int32_t rep_max;
 
+    // pointer to the regex character corresponding to this atom.
+    const char *expp;
+
     union {
         re_atom_t *re_sub;
         bracket_t *bmap; // for bracket expression.

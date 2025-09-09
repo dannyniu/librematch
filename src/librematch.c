@@ -6,9 +6,13 @@
 #define ctx subctx
 #ifndef eprintf
 #define eprintf(...) //printf(__VA_ARGS__)
+#define tprintf(...)
+#define dumpstate(...)
+#else
+#warning Debugging code depends on the original expression string not being freed!
+#define tprintf(fmt, ...) do { ptrdiff_t ao = subctx.atom_offset; (void)ao; eprintf("[%td]'%c'%*s" fmt, ao, *subctx.atom[ao].expp, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
+#define dumpstate(pre, post, ret) tprintf(pre " %d; q=%zd, offsub=%td, ret=%d, flags=%d " post, __LINE__, subctx.q, offsub, ret, flags)
 #endif // eprintf
-#define tprintf(fmt, ...) do { eprintf("%p[%td]%*s" fmt, subctx.atom, subctx.atom_offset, (int)subctx.stack_depth*3, "" __VA_OPT__(,) __VA_ARGS__); } while(false)
-#define dumpstate(pre, post, ret) tprintf(pre " %d; q=%zd, offsub=%td, info=%d " post, __LINE__, subctx.q, offsub, ret)
 
 // 2025-07-13, Idea(s) of matching algorithm:
 // 2025-07-20: moved to "librematch.md".
@@ -68,15 +72,16 @@ int match_atom_withq(
     libre_match_t *matches, size_t nmatches, int flags,
     match_ctx_t *matchctx);
 
+// MARK: Subroutines for Next Choices.
+
 int try_match_next_atom(
-    const char *subject, size_t slen, ptrdiff_t offsub,
+    const char *subject, size_t slen, //- ptrdiff_t offsub,
     libre_match_t *matches, size_t nmatches, int flags,
     match_ctx_t *matchctx, int ret)
 {
     match_ctx_t ctx = *matchctx;
     int flags_saved = flags;
     int subret;
-    (void)offsub;
 
     if( ctx.q >= (size_t)ctx.atom[ctx.atom_offset].rep_min )
     {
@@ -129,19 +134,19 @@ int try_match_next_atom(
 
         else assert( 0 );
     }
+    else tprintf("-- under-quantified, no-conti.\n");
 
     return ret;
 }
 
 int try_increase_q(
-    const char *subject, size_t slen, ptrdiff_t offsub,
+    const char *subject, size_t slen, //- ptrdiff_t offsub,
     libre_match_t *matches, size_t nmatches, int flags,
     match_ctx_t *matchctx, int ret)
 {
     match_ctx_t ctx = *matchctx;
     int flags_saved = flags;
     int subret;
-    (void)offsub;
 
     if( ctx.q <= (size_t)ctx.atom[ctx.atom_offset].rep_max )
     {
@@ -175,7 +180,7 @@ int try_increase_q(
         }
         else
         {
-            tprintf("-- repeat end --\n");
+            tprintf("-- last repeat. --\n");
             subret = 0;
         }
 
@@ -209,6 +214,7 @@ int try_increase_q(
 
         else assert( 0 );
     }
+    else tprintf("-- over-quantified, no-repeat.\n");
 
     return ret;
 }
@@ -220,12 +226,13 @@ int match_atom_withq(
     match_ctx_t *matchctx)
 {
     // chained contexts stack.
-    match_ctx_t subctx = *matchctx; //, savedctx;
+    match_ctx_t subctx = *matchctx; //-, savedctx;
 
     // local working variables.
     ptrdiff_t record = -1;
+#define atomoff subctx.atom_offset
     short ret = -1, subret = -1;
-    short unless_match;
+    short unless_match, AtomType;
 
     if( !subctx.record ) subctx.record = &record;
 
@@ -234,10 +241,12 @@ int match_atom_withq(
         subctx.root = matchctx;
     }
 
-    dumpstate("// Reached", "//\n", flags);
+    dumpstate("// Reached", "//\n", ret);
 
-    if( (subctx.atom[subctx.atom_offset].type == 0 ||
-         subctx.atom[subctx.atom_offset].type == 6) &&
+// MARK: Handle End of Expression.
+
+    if( (subctx.atom[atomoff].type == 0 ||
+         subctx.atom[atomoff].type == 6) &&
         !subctx.parent )
     {
         ptrdiff_t overall;
@@ -309,7 +318,7 @@ int match_atom_withq(
         // not a better match.
         else ret = 1;
 
-        // overall was {NULL}, this is in fact better.
+        // overall was (NULL), this is in fact better.
         if( ret == 1 && overall == -1 )
             ret = 2;
 
@@ -353,12 +362,15 @@ int match_atom_withq(
     {
         match_ctx_t spwnctx;
         unless_match = 0;
+        AtomType = subctx.atom[atomoff].type;
 
-        if( subctx.atom[subctx.atom_offset].type == 3 )
+        // MARK: Match the current atom.
+
+        if( AtomType == 3 )
         {
             spwnctx = subctx;
             spwnctx.parent = &subctx;
-            spwnctx.atom = subctx.atom[subctx.atom_offset].re_sub;
+            spwnctx.atom = subctx.atom[atomoff].re_sub;
             spwnctx.atom_offset = 0;
             spwnctx.q = 0;
             spwnctx.rm_so = offsub;
@@ -382,7 +394,7 @@ int match_atom_withq(
                 if( !subret )
                 {
                     subctx.rm_so = subctx.rm_eo = -1;
-                    tprintf("-- !! %d; match={NULL} --\n", __LINE__);
+                    tprintf("-- !! %d; match=(NULL) --\n", __LINE__);
                 }
                 else
                 {
@@ -393,7 +405,7 @@ int match_atom_withq(
                 goto next_alternative;
             }
         }
-        else if( subctx.atom[subctx.atom_offset].type == 7 )
+        else if( AtomType == 7 )
         {
             if( subctx.q == 0 )
             {
@@ -404,7 +416,7 @@ int match_atom_withq(
             {
                 ptrdiff_t so;
                 size_t len;
-                int ref = subctx.atom[subctx.atom_offset].value;
+                int ref = subctx.atom[atomoff].value;
                 // Backreference, BRE-specific addition.
                 if( (size_t)ref >= nmatches )
                 {
@@ -439,31 +451,70 @@ int match_atom_withq(
                 if( ret == 0 ) break;
             }
         }
-        else if( subctx.atom[subctx.atom_offset].type == 0 )
+        else if( AtomType == 0 || AtomType == 6 )
         {
-            tprintf("- SubExpr Ended, NextAlt. -\n");
+            // 2025-09-07:
+            // Consider the possibility of empty alternative(s).
+            // As such, the following assertions doesn't always hold.
+            //- assert( ret == -1 );
+            //- assert( subctx.parent );
 
-            // Added back 2025-09-06.
-            // This is otherwise not an error, but `ret` had nonetheless
-            // been initialized to -1, so set it to a successful match
-            // at this point.
-            assert( ret == -1 );
-            ret = 1;
+            if( AtomType == 6 )
+            {
+                // 2025-09-07 retro note:
+                // This block may be entered by a recursive call that
+                // reaches an atom that happens to be an alternative
+                // separator (i.e. a `try_match_next_atom` call).
+                // Actions are therefore required.
+                tprintf("- AltDelim %td %td -\n", subctx.parent->rm_so, subctx.parent->rm_eo);
+            }
+            else
+            {
+                tprintf("- SubExpr Ended, NextAlt. -\n");
 
-            subctx.rm_so = subctx.rm_eo = offsub;
-            goto next_alternative;
-        }
-        else if( subctx.atom[subctx.atom_offset].type == 6 )
-        {
-            // 2025-09-07 retro note:
-            // This block may be entered by a recursive call that reaches an
-            // atom that happens to be an alternative separator (e.g.
-            // a `try_match_next_atom` call). Actions are therefore required.
-            tprintf("- AltDelim %td %td -\n", subctx.parent->rm_so, subctx.parent->rm_eo);
+                // Added back 2025-09-06.
+                // This is otherwise not an error, but `ret` had nonetheless
+                // been initialized to -1, so set it to some successful match
+                // at this point.
+                // Note 2025-09-07:
+                // Subsummed to the following assignment to `ret`.
+            }
             ret = ret > 0 ? ret : flags == fDefiniteBetterMatch(flags) ? 2 : 1;
+
             subctx.parent->rm_eo = subctx.rm_so = subctx.rm_eo = offsub;
             subexpr_save1match(matchctx->parent, matches, nmatches, ret);
-            goto subsequent_expr;
+
+            spwnctx = *subctx.parent;
+
+            tprintf("- SubSeqExpr rm_eo=%td offsub=%td -\n", subctx.rm_eo, offsub);
+            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+
+            ret = try_match_next_atom(
+                subject, slen, matches, nmatches,
+                flags, &spwnctx, ret);
+
+            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+
+            if( (size_t)offsub <= slen &&
+                subctx.parent->rm_so != subctx.parent->rm_eo )
+            {
+                if( (atomoff > 0 && subctx.atom[atomoff-1].type != 6) ||
+                    (subctx.q <= (size_t)subctx.atom[atomoff].rep_max &&
+                     subctx.q <= (size_t)subctx.atom[atomoff].rep_min) )
+                {
+                    ret = try_increase_q(
+                        subject, slen, matches, nmatches,
+                        flags, &spwnctx, ret);
+                }
+            }
+
+            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
+
+            // 2025-09-09:
+            // Reached as an end of a slice of (sub-)expression.
+            // Breaking handled *as part of* 'next-alternative'.
+            //: if( atomoff > 0 && subctx.atom[atomoff-1].type != 6 ) break; else
+            goto next_alternative;
         }
         else
         {
@@ -475,11 +526,11 @@ int match_atom_withq(
             else
             {
                 subret = match_atom_scalar(
-                    &subctx.atom[subctx.atom_offset],
+                    &subctx.atom[atomoff],
                     subject, slen, offsub, flags);
                 if( !subret )
                 {
-                    tprintf("-- !! %d; match={NULL} --\n", __LINE__);
+                    tprintf("-- !! %d; match=(NULL) --\n", __LINE__);
                     tprintf("-- .. slen=%zd, offsub=%td, %c, --\n", slen, offsub, subject[offsub]);
                     if( ret == -1 )
                     {
@@ -495,22 +546,23 @@ int match_atom_withq(
                     tprintf("-- @@ %d; matched --\n", __LINE__);
                     tprintf("-- @@ slen=%zd, offsub=%td, %c, --\n", slen, offsub, subject[offsub]);
                     subctx.rm_so = subctx.rm_eo = offsub;
-                    if( subctx.atom[subctx.atom_offset].type == 1 ||
-                        subctx.atom[subctx.atom_offset].type == 2 )
+                    if( AtomType == 1 || AtomType == 2 )
                         subctx.rm_eo += 1;
                 }
             }
         }
 
+        // MARK: Alternative Choice with Adjacent Atom.
+
         // it is assumed at this point that subctx.rm_* are set.
         // 2025-09-06: likewise, `ret` should also be assigned.
 
-        // savedctx = subctx;
+        //- savedctx = subctx;
         unless_match = 1;
         tprintf("ret(start)==%d; q=%zd\n", ret, subctx.q);
 
         ret = try_match_next_atom(
-            subject, slen, offsub, matches, nmatches,
+            subject, slen, matches, nmatches,
             flags, &subctx, ret);
 
         tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
@@ -518,7 +570,7 @@ int match_atom_withq(
         if( subctx.parent ) // save every potential good match.
         {
             if( subctx.q >= (size_t)subctx.atom[
-                    subctx.atom_offset].rep_min )
+                    atomoff].rep_min )
             {
                 subctx.parent->rm_eo = subctx.rm_eo;
                 subexpr_save1match(matchctx->parent, matches, nmatches, ret);
@@ -526,7 +578,7 @@ int match_atom_withq(
         }
 
         ret = try_increase_q(
-            subject, slen, offsub, matches, nmatches,
+            subject, slen, matches, nmatches,
             flags, &subctx, ret);
 
         tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
@@ -534,7 +586,7 @@ int match_atom_withq(
         if( subctx.parent ) // save every potential good match.
         {
             if( subctx.q >= (size_t)subctx.atom[
-                    subctx.atom_offset].rep_min )
+                    atomoff].rep_min )
             {
                 subctx.parent->rm_eo = subctx.rm_eo;
                 subexpr_save1match(matchctx->parent, matches, nmatches, ret);
@@ -542,85 +594,33 @@ int match_atom_withq(
         }
 
         if( subctx.q < (size_t)subctx.atom[
-                subctx.atom_offset].rep_min )
+                atomoff].rep_min )
             break;
 
+        // MARK: Proceeding to Next Alternative.
+
     next_alternative:
-        if( subctx.atom_offset > 0 &&
-            subctx.atom[subctx.atom_offset-1].type != 6 )
+        if( atomoff > 0 && subctx.atom[atomoff-1].type != 6 )
             break; // not the beginning of an alternative.
 
         while( true )
         {
             // set to one after the beginning or the alternative delimiter,
-            ++  subctx.atom_offset;
+            ++ atomoff;
 
             // break when the next is reached (delim or end).
-            if( subctx.atom[subctx.atom_offset].type == 0 ||
-                subctx.atom[subctx.atom_offset].type == 6 )
+            if( subctx.atom[atomoff].type == 0 ||
+                subctx.atom[atomoff].type == 6 )
                 break;
 
             // The order of increment and break should matter, if changing the
             // order doesn't break application, then this code is buggy.
         }
 
-        if( !subctx.parent )
+        if( subctx.atom[atomoff].type == 6 )
         {
-            if( subctx.atom[subctx.atom_offset].type == 6 )
-            {
-                subctx.atom_offset ++;
-                //tprintf("<<-- alternative offset.\n");
-                continue;
-            }
-            else break; // no more alternatives.
-        }
-        // else we're in a subexpression.
-
-        tprintf("ret(%d)==%d; NextAlt (%p:%td) in Parent (%p:%td).\n", __LINE__, ret, &subctx, subctx.atom_offset, subctx.parent, subctx.parent->atom_offset);
-        // 2025-08-20: reworked this termination condition.
-        if( subctx.parent->rm_so == subctx.parent->rm_eo )
-        {
-            // 2025-08-20
-            // [Interpretives for the recursion termination condition]:
-            // To avoid infinite recursion, exclude zero-length matches,
-            // as they may confuse optional quantifications
-            // and alternative steppers.
-            if( subctx.atom[subctx.atom_offset].type == 0 )
-                break;
-        }
-
-        // This label can preceed or follow the above condition block,
-        // it won't make difference, as the only jump source required
-        // the atom to be of type 6 (alternative separator) to enter.
-    subsequent_expr:
-        spwnctx = *subctx.parent;
-
-        tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
-
-        if( flags == fRegBRE(flags) || // BRE has back-ref, but no alt-sep.
-            unless_match || spwnctx.atom[spwnctx.atom_offset+1].type == 0 )
-        {
-            ret = try_match_next_atom(
-                subject, slen, offsub, matches, nmatches,
-                flags, &spwnctx, ret);
-
-            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
-
-            if( (size_t)offsub <= slen &&
-                subctx.parent->rm_so != subctx.parent->rm_eo )
-            {
-                ret = try_increase_q(
-                    subject, slen, offsub, matches, nmatches,
-                    flags, &spwnctx, ret);
-            }
-
-            tprintf("ret(%d)==%d; q=%zd\n", __LINE__, ret, subctx.q);
-        }
-
-        if( subctx.atom[subctx.atom_offset].type == 6 )
-        {
-            subctx.atom_offset ++;
-            //tprintf("<<-- alternative offset %td.\n");
+            ++ atomoff;
+            //tprintf("<<-- alternative offset.\n");
             continue;
         }
         else break; // no more alternatives.
@@ -678,7 +678,15 @@ void subexpr_save1match(
         }
         if( matches[atom->value].q == ctx->q && subret == 2 )
         {
-            if( matches[atom->value].depth <= ctx->stack_depth )
+            // 2025-09-07: Q: ??!! `<` Or `<=` ??!!
+            //
+            // 2025-09-07:
+            // Only a deeper stack level saves a match.
+            // Deeper stack levels correspond to later
+            // atoms in the sequence, as the engine is
+            // based on recursive descending of atoms
+            // from first to last.
+            if( matches[atom->value].depth < ctx->stack_depth )
             {
                 matches[atom->value].depth = ctx->stack_depth;
                 break;
@@ -808,6 +816,7 @@ int libregcomp(libregexp_t *preg, const char *pattern, int cflags)
 {
     int escc = '\\';
     ptrdiff_t subret;
+    preg->expb = pattern;
     preg->re_nsub = 0;
     if( LIBREG_ALTEXC(cflags) ) escc = LIBREG_ALTEXC(cflags);
 

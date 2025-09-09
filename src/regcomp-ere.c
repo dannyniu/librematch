@@ -35,6 +35,7 @@ ptrdiff_t regcomp_extended(
                 .value = ++(*groupno),
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
 
             subret = regcomp_extended(
@@ -64,6 +65,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
 
             ret = tx;
@@ -137,6 +139,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
 
             // It relies on `regcomp_brackets` set the `bmap` member
@@ -161,6 +164,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
 
             atoms[ta-1].bmap = calloc(1, sizeof(bracket_t));
@@ -185,6 +189,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
             ++ tx;
         }
@@ -198,6 +203,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
             ++ tx;
         }
@@ -211,6 +217,7 @@ ptrdiff_t regcomp_extended(
                 .value = 0,
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
             ++ tx;
         }
@@ -224,6 +231,7 @@ ptrdiff_t regcomp_extended(
                 .value = regexp[tx+1],
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
             tx += 2;
         }
@@ -237,6 +245,7 @@ ptrdiff_t regcomp_extended(
                 .value = regexp[tx],
                 .rep_min = 1,
                 .rep_max = 1,
+                .expp = regexp+tx,
             };
             ++ tx;
         }

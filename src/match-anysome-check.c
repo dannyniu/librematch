@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
     int ret;
     libregcomp(&preg, argv[2], LIBREG_EXTENDED);
 
-    printatoms(preg.re_atoms, 0);
+    //printatoms(preg.re_atoms, 0);
 
     ret = libregexec(&preg, argv[3], nmatches, matches, 0);
     printf("%d.\n", ret);

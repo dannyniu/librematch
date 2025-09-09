@@ -44,7 +44,7 @@ The fix for handling alternatives
 ====
 
 When a zero-length match occurs, if the current subexpression is repeated, then
-infinite recursion will occur - this is way the code must proceed to the next
+infinite recursion will occur - this is why the code must proceed to the next
 alternative (or to the next atom in the parent expression) in this case.
 While this should be obvious on itself, how to do it in practice isn't. The
 previous buggy code proceeded directly to the next atom in the parent

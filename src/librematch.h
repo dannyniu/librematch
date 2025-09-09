@@ -11,6 +11,7 @@
 /// The internals should not be altered, and it should be treated as opaque.
 typedef struct {
     re_atom_t *re_atoms;
+    const char *expb; // unretained (weak) pointer to the start of the regex.
     size_t re_nsub;
     int flags;
 } libregexp_t;
