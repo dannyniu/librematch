@@ -1,10 +1,5 @@
 # DannyNiu/NJF, 2024-07-27. Public Domain.
 
-include common.mk
-include objects.mk
-
-include inc-config.mk
-
 .PHONY: all
 
 all: build/${ProductName}.${FILE_EXT} build/include build/${ProductName}.pc
@@ -12,7 +7,6 @@ all: build/${ProductName}.${FILE_EXT} build/include build/${ProductName}.pc
 build/${ProductName}.${FILE_EXT}: ${INPUT_OBJECTS}
 	${AR} ${ARFLAGS} $@ ${INPUT_OBJECTS}
 
-headers_select_expr='case "$$1" in *.h) echo "$$1";; *.c.h) [ "$$1" != $${1%.c.h} ] && '
 build/include:
 	mkdir -p build/include
 	cd src ; { find . -name \*.h ! -name \*.c.h ; \
@@ -23,17 +17,15 @@ build/include:
 		cp "$$PWD/$$e" "../build/include/$$e" ; done
 
 build/${ProductName}.pc:
-	printf '%s\n' \
-		"prefix=${prefix}" "exec_prefix=${exec_prefix}" \
-		"libdir=${libdir}" "includedir=${includedir}" \
-		"Name: The librematch POSIX regular expression library" \
-		"Version: ${ProductRev}" \
-		"Description: A POSIX regex library." \
-		"URL: https://github.com/dannyniu/librematch" \
-		"URL: https://gitee.com/dannyniu/librematch" \
-		'Cflags: -I$${includedir} '"${CFLAGS_GROUP_WITH}" \
-		'Libs: -L$${libdir} -lMySuiteA' \
-		> $@
+	{ printf '%s\n' \
+	  "prefix=${prefix}" "exec_prefix=${exec_prefix}" \
+	  "libdir=${libdir}" "includedir=${includedir}" \
+	  'Cflags: -I$${includedir} '"${CFLAGS_GROUP_WITH}" \
+	  'Libs: -L$${libdir} -lrematch' \
+	  "Name: ${PkgConfigName}" \
+	  "Version: ${ProductRev}" \
+	  "Description: ${PkgConfigDesc}" ; \
+	  printf 'URL: %s\n' ${PkgConfigURLs} ; } > $@
 
 # 2024-03-08:
 # This file is created whenever "inc-dep.mk" ought to be re-made for
