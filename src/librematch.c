@@ -965,5 +965,6 @@ int libregexec(
 
 void libregfree(libregexp_t *preg)
 {
-    return regfree_atoms(preg->re_atoms);
+    regfree_atoms(preg->re_atoms);
+    preg->re_atoms = NULL;
 }
