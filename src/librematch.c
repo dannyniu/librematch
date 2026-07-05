@@ -109,7 +109,7 @@ int try_match_next_atom(
         subret = match_atom_withq(
             subject, slen, matchctx->rm_eo,
             matches, nmatches, flags, &ctx);
-        -- ctx.atom_offset;
+        -- ctx.stack_depth;
         tprintf("}\n");
 
         if( subret == -1 ) ret = subret; // TODO: handle errors.
@@ -574,8 +574,7 @@ int match_atom_withq(
 
         if( subctx.parent ) // save every potential good match.
         {
-            if( subctx.q >= (size_t)subctx.atom[
-                    atomoff].rep_min )
+            if( subctx.q >= (size_t)subctx.atom[atomoff].rep_min )
             {
                 subctx.parent->rm_eo = subctx.rm_eo;
                 subexpr_save1match(matchctx->parent, matches, nmatches, ret);
@@ -590,17 +589,18 @@ int match_atom_withq(
 
         if( subctx.parent ) // save every potential good match.
         {
-            if( subctx.q >= (size_t)subctx.atom[
-                    atomoff].rep_min )
+            if( subctx.q >= (size_t)subctx.atom[atomoff].rep_min )
             {
                 subctx.parent->rm_eo = subctx.rm_eo;
                 subexpr_save1match(matchctx->parent, matches, nmatches, ret);
             }
         }
 
-        if( subctx.q < (size_t)subctx.atom[
-                atomoff].rep_min )
-            break;
+        if( subctx.q < (size_t)subctx.atom[atomoff].rep_min )
+        {
+            if( subctx.q > 0 ) break;
+            else goto next_alternative;
+        }
 
         // MARK: Proceeding to Next Alternative.
 
