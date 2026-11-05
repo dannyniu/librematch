@@ -241,8 +241,9 @@ ptrdiff_t regcomp_brackets(bracket_t **out, const char *expr)
                     goto fail;
                 }
             }
+            else goto other_bytes;
         }
-        else
+        else other_bytes:
         {
             if( ran && 0 <= ran1 && ran1 < 256 )
             {

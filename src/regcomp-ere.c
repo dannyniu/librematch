@@ -261,6 +261,8 @@ void regfree_atoms(re_atom_t *re)
 {
     size_t t;
 
+    if( !re ) return;
+
     for(t=0; re[t].type != 0; t++)
     {
         switch( re[t].type ) {
